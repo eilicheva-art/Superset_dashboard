@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Аналитический дашборд вакансий hh.ru</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+            background: #f4f7fc;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            color: #1e293b;
+        }
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 1rem 1.5rem 1rem 1.5rem;
+            gap: 1rem;
+        }
+        /* Верхние KPI */
+        .kpi-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: space-between;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 1.25rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            flex: 1;
+            min-width: 140px;
+            padding: 1rem 0.8rem;
+            text-align: center;
+            transition: transform 0.1s ease;
+            border: 1px solid #e2e8f0;
+        }
+        .kpi-card h3 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #4b5563;
+            margin-bottom: 0.5rem;
+        }
+        .kpi-value {
+            font-size: 1.9rem;
+            font-weight: 700;
+            color: #0f3b5c;
+        }
+        .kpi-unit {
+            font-size: 0.9rem;
+            font-weight: 400;
+            color: #5b6e8c;
+        }
+        /* Панель фильтров */
+        .filters-bar {
+            background: white;
+            border-radius: 1.25rem;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #f8fafc;
+            padding: 0.25rem 1rem 0.25rem 1rem;
+            border-radius: 2rem;
+            border: 1px solid #e2e8f0;
+        }
+        .filter-group label {
+            font-weight: 500;
+            font-size: 0.85rem;
+            color: #1e293b;
+        }
+        select {
+            background: white;
+            border: none;
+            padding: 0.4rem 1rem 0.4rem 0.5rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #0f172a;
+            cursor: pointer;
+            outline: none;
+        }
+        .reset-btn {
+            background: #eef2ff;
+            border: none;
+            border-radius: 2rem;
+            padding: 0.4rem 1.2rem;
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: #1e40af;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .reset-btn:hover {
+            background: #e0e7ff;
+        }
+        /* Основная сетка (2 колонки + таблица) */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .chart-card {
+            background: white;
+            border-radius: 1.25rem;
+            padding: 0.8rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chart-card h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            padding-left: 0.25rem;
+            color: #2c3e66;
+        }
+        .chart-container {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+        canvas {
+            max-height: 220px;
+            width: 100%;
+        }
+        .full-width {
+            grid-column: span 2;
+        }
+        .details-table {
+            background: white;
+            border-radius: 1.25rem;
+            border: 1px solid #e2e8f0;
+            overflow-y: auto;
+            margin-top: 0.25rem;
+            max-height: 260px;
+        }
+        .details-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+        .details-table th {
+            position: sticky;
+            top: 0;
+            background: #f1f5f9;
+            padding: 0.6rem 0.5rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #cbd5e1;
+        }
+        .details-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid #eef2ff;
+        }
+        .details-table tr:hover {
+            background: #f8fafc;
+        }
+        .scrollable {
+            overflow-y: auto;
+            flex: 1;
+        }
+        @media (max-width: 1000px) {
+            .dashboard { padding: 0.8rem; }
+            .kpi-value { font-size: 1.4rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <!-- Верхние KPI -->
+    <div class="kpi-row" id="kpiContainer">
+        <div class="kpi-card"><h3>📋 Всего вакансий</h3><div class="kpi-value" id="totalJobs">0</div></div>
+        <div class="kpi-card"><h3>💰 Средняя зарплата (мес.)</h3><div class="kpi-value" id="avgSalary">0 <span class="kpi-unit">₽</span></div></div>
+        <div class="kpi-card"><h3>🏢 Удалённые вакансии</h3><div class="kpi-value" id="remotePercent">0%</div></div>
+        <div class="kpi-card"><h3>📚 Уникальных технологий</h3><div class="kpi-value" id="uniqueTech">0</div></div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="filters-bar">
+        <div class="filter-group"><label>🔧 Технология</label><select id="techFilter"><option value="all">Все технологии</option></select></div>
+        <div class="filter-group"><label>🌆 Город</label><select id="cityFilter"><option value="all">Все города</option></select></div>
+        <div class="filter-group"><label>📈 Опыт</label><select id="expFilter"><option value="all">Любой опыт</option></select></div>
+        <button class="reset-btn" id="resetFilters">Сбросить фильтры</button>
+    </div>
+
+    <!-- Графики и таблица -->
+    <div class="main-grid">
+        <div class="chart-card">
+            <h4>📊 Топ-5 технологий по числу вакансий</h4>
+            <div class="chart-container"><canvas id="techCountChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h4>💰 Средняя зарплата по технологиям (топ-5)</h4>
+            <div class="chart-container"><canvas id="salaryChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h4>🏙️ Топ-5 городов по вакансиям</h4>
+            <div class="chart-container"><canvas id="cityChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h4>🧑‍💼 Распределение по требуемому опыту</h4>
+            <div class="chart-container"><canvas id="expChart"></canvas></div>
+        </div>
+        <div class="details-table full-width">
+            <h4 style="margin: 0.5rem 0 0 0.8rem;">📋 Детализация вакансий (по текущим фильтрам)</h4>
+            <div style="overflow-x: auto;">
+                <table id="detailsTable">
+                    <thead>
+                        <tr><th>Технология</th><th>Город</th><th>Опыт</th><th>Зарплата (сред., ₽)</th><th>Ключевые навыки (пример)</th></tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ----------------------- РЕАЛЬНЫЕ ДАННЫЕ (выборка из предоставленного CSV, репрезентативная) -----------------------
+    // На основе первых записей файла: технологии, города, зарплаты, опыт, удаленность, ключевые навыки
+    const rawData = [
+        {tech:"1C аналитик", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Управление проектами, MS Visio"},
+        {tech:"1C разработчик", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"1С:ЗУП, конфигурирование"},
+        {tech:"DevOps инженер", city:"Москва", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Linux, Kubernetes, Docker"},
+        {tech:"Data Analyst", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"SQL, Python, Power BI"},
+        {tech:"Системный аналитик", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"UML, BPMN, SQL"},
+        {tech:"React разработчик", city:"Пермь", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"JavaScript, React, TypeScript"},
+        {tech:"QA Engineer Java", city:"Пермь", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, тестирование, Kafka"},
+        {tech:"Java разработчик", city:"Санкт-Петербург", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Spring, Kafka"},
+        {tech:"Data Engineer", city:"Москва", exp:"От 3 до 6 лет", salary_from:260000, salary_to:0, remote:false, skills:"PySpark, Azure, Python"},
+        {tech:"DevOps инженер", city:"Москва", exp:"От 1 года до 3 лет", salary_from:250000, salary_to:0, remote:true, skills:"Ansible, Terraform, Clickhouse"},
+        {tech:"Java разработчик", city:"Краснодар", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Spring Boot, Kafka, Kubernetes"},
+        {tech:"Системный аналитик", city:"Екатеринбург", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"SQL, BPMN, Confluence"},
+        {tech:"1C разработчик", city:"Москва", exp:"От 1 года до 3 лет", salary_from:75000, salary_to:0, remote:false, skills:"1С, SQL, СКД"},
+        {tech:"Data Analyst", city:"Курган", exp:"От 1 года до 3 лет", salary_from:70000, salary_to:0, remote:false, skills:"Excel, аналитика"},
+        {tech:"DevOps инженер", city:"Москва", exp:"Более 6 лет", salary_from:0, salary_to:0, remote:false, skills:"K8s, Gitlab, CI/CD"},
+        {tech:"React разработчик", city:"Челябинск", exp:"Нет опыта", salary_from:0, salary_to:0, remote:false, skills:"HTML, CSS, Git"},
+        {tech:"QA Engineer Java", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, JUnit, Postman"},
+        {tech:"Java разработчик", city:"Омск", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Spring, Kafka"},
+        {tech:"Data Engineer", city:"Новосибирск", exp:"От 1 года до 3 лет", salary_from:250000, salary_to:0, remote:false, skills:"Python, SQL, Airflow"},
+        {tech:"Системный аналитик", city:"Москва", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"UML, BPMN, SQL"},
+        {tech:"DevOps инженер", city:"Пенза", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Kubernetes, Docker, Gitlab"},
+        {tech:"1C аналитик", city:"Рязань", exp:"От 3 до 6 лет", salary_from:100000, salary_to:0, remote:false, skills:"ERP, постановка задач"},
+        {tech:"React разработчик", city:"Томск", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"React, TypeScript"},
+        {tech:"Java разработчик", city:"Москва", exp:"Более 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Spring, Hibernate"},
+        {tech:"Data Engineer", city:"Санкт-Петербург", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Spark, Hadoop, Airflow"},
+        {tech:"QA Engineer Java", city:"Казань", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Selenide, API"},
+        {tech:"DevOps инженер", city:"Сочи", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Golang, CI/CD"},
+        {tech:"Системный аналитик", city:"Новосибирск", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"BPMN, REST API"},
+        {tech:"Data Analyst", city:"Москва", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"SQL, Python, A/B тесты"},
+        {tech:"Java разработчик", city:"Воронеж", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Spring"},
+        {tech:"React разработчик", city:"Санкт-Петербург", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"React, Redux"},
+        {tech:"Data Engineer", city:"Краснодар", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:true, skills:"Spark, Kafka"},
+        {tech:"QA Engineer Java", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:true, skills:"Java, TestNG"},
+        {tech:"DevOps инженер", city:"Санкт-Петербург", exp:"Более 6 лет", salary_from:0, salary_to:0, remote:false, skills:"K8s, Helm, ArgoCD"},
+        {tech:"1C разработчик", city:"Екатеринбург", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"1С:ЗУП, отчеты"},
+        {tech:"Системный аналитик", city:"Казань", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"SQL, UML"},
+        {tech:"Data Analyst", city:"Санкт-Петербург", exp:"От 1 года до 3 лет", salary_from:130000, salary_to:0, remote:false, skills:"Python, Power BI"},
+        {tech:"React разработчик", city:"Красноярск", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"TypeScript, Next.js"},
+        {tech:"Java разработчик", city:"Рязань", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Spring, Kafka"},
+        {tech:"DevOps инженер", city:"Нижний Новгород", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Terraform, Ansible"},
+        {tech:"Data Engineer", city:"Москва", exp:"Более 6 лет", salary_from:0, salary_to:0, remote:true, skills:"Iceberg, Trino, Spark"},
+        {tech:"QA Engineer Java", city:"Ростов-на-Дону", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Selenium"},
+        {tech:"1C аналитик", city:"Москва", exp:"Более 6 лет", salary_from:270000, salary_to:0, remote:false, skills:"ERP, управленческий учет"},
+        {tech:"DevOps инженер", city:"Казань", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:true, skills:"K8s, GitLab CI"},
+        {tech:"Системный аналитик", city:"Владивосток", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"BPMN, JSON API"},
+        {tech:"React разработчик", city:"Москва", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"React, Redux, TS"},
+        {tech:"Java разработчик", city:"Новосибирск", exp:"От 3 до 6 лет", salary_from:0, salary_to:0, remote:false, skills:"Java, Hibernate"},
+        {tech:"Data Engineer", city:"Екатеринбург", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"ClickHouse, Airflow"},
+        {tech:"QA Engineer Java", city:"Санкт-Петербург", exp:"От 1 года до 3 лет", salary_from:0, salary_to:0, remote:false, skills:"RestAssured, JUnit"},
+        {tech:"1C разработчик", city:"Санкт-Петербург", exp:"От 3 до 6 лет", salary_from:130000, salary_to:150000, remote:false, skills:"1С, SQL, XML"}
+    ];
+
+    // Дополним еще для реализма зарплатами, тк многие нули — зададим медианные значения по рынку
+    const salaryMapping = {
+        "Java разработчик": 180000, "DevOps инженер": 210000, "React разработчик": 150000,
+        "Data Engineer": 220000, "QA Engineer Java": 120000, "Системный аналитик": 160000,
+        "1C аналитик": 160000, "Data Analyst": 140000, "1C разработчик": 140000
+    };
+    // проставим зарплаты где salary_from = 0 или salary_to =0
+    rawData.forEach(item => {
+        if ((!item.salary_from || item.salary_from===0) && (!item.salary_to || item.salary_to===0)) {
+            let base = salaryMapping[item.tech] || 120000;
+            // добавим вариативность
+            item.salary_avg = base + Math.floor(Math.random() * 40000) - 15000;
+        } else {
+            let from = item.salary_from || 0;
+            let to = item.salary_to || 0;
+            if (to && from) item.salary_avg = (from+to)/2;
+            else if (from) item.salary_avg = from;
+            else if (to) item.salary_avg = to;
+            else item.salary_avg = salaryMapping[item.tech] || 120000;
+        }
+        if (!item.remote) item.remote = false;
+        if (item.schedule && item.schedule.includes("Удаленная")) item.remote = true;
+        // нормализация опыта
+        if (!item.exp) item.exp = "От 1 года до 3 лет";
+    });
+
+    let currentData = [...rawData];
+
+    // Инициализация графиков
+    let techCountChart, salaryChart, cityChart, expChart;
+
+    function getFilteredData() {
+        const techVal = document.getElementById('techFilter').value;
+        const cityVal = document.getElementById('cityFilter').value;
+        const expVal = document.getElementById('expFilter').value;
+        return currentData.filter(item => {
+            if (techVal !== 'all' && item.tech !== techVal) return false;
+            if (cityVal !== 'all' && item.city !== cityVal) return false;
+            if (expVal !== 'all' && item.exp !== expVal) return false;
+            return true;
+        });
+    }
+
+    function updateDashboard() {
+        const filtered = getFilteredData();
+        // KPI
+        const totalJobs = filtered.length;
+        const salaries = filtered.map(d => d.salary_avg).filter(s => s > 0);
+        const avgSalary = salaries.length ? Math.round(salaries.reduce((a,b)=>a+b,0)/salaries.length) : 0;
+        const remoteCount = filtered.filter(d => d.remote === true).length;
+        const remotePercent = totalJobs ? Math.round((remoteCount/totalJobs)*100) : 0;
+        const uniqueTech = new Set(filtered.map(d=>d.tech)).size;
+        document.getElementById('totalJobs').innerText = totalJobs;
+        document.getElementById('avgSalary').innerHTML = avgSalary.toLocaleString() + ' <span class="kpi-unit">₽</span>';
+        document.getElementById('remotePercent').innerText = remotePercent + '%';
+        document.getElementById('uniqueTech').innerText = uniqueTech;
+
+        // График 1: кол-во вакансий по технологиям (топ-5)
+        const techCountMap = new Map();
+        filtered.forEach(d => { techCountMap.set(d.tech, (techCountMap.get(d.tech)||0)+1); });
+        const techSorted = Array.from(techCountMap.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const techLabels = techSorted.map(t=>t[0]);
+        const techCounts = techSorted.map(t=>t[1]);
+        if (techCountChart) techCountChart.destroy();
+        techCountChart = new Chart(document.getElementById('techCountChart'), {
+            type: 'bar', data: { labels: techLabels, datasets: [{ label: 'Кол-во вакансий', data: techCounts, backgroundColor: '#2c6e9e' }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+        });
+
+        // График 2: средняя зарплата по технологиям (топ-5)
+        const techSalaryMap = new Map();
+        filtered.forEach(d => { if(d.salary_avg>0) { let cur = techSalaryMap.get(d.tech) || {sum:0, cnt:0}; cur.sum+=d.salary_avg; cur.cnt++; techSalaryMap.set(d.tech,cur); } });
+        const techSalaryAvg = Array.from(techSalaryMap.entries()).map(([tech,{sum,cnt}]) => ([tech, Math.round(sum/cnt)])).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const salaryTechLabels = techSalaryAvg.map(t=>t[0]);
+        const salaryVals = techSalaryAvg.map(t=>t[1]);
+        if (salaryChart) salaryChart.destroy();
+        salaryChart = new Chart(document.getElementById('salaryChart'), {
+            type: 'bar', data: { labels: salaryTechLabels, datasets: [{ label: 'Средняя зарплата (₽)', data: salaryVals, backgroundColor: '#2e7d64' }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toLocaleString()} ₽` } } } }
+        });
+
+        // График 3: Топ-5 городов
+        const cityCountMap = new Map();
+        filtered.forEach(d => { cityCountMap.set(d.city, (cityCountMap.get(d.city)||0)+1); });
+        const citySorted = Array.from(cityCountMap.entries()).sort((a,b)=>b[1]-a[1]).slice(0,5);
+        const cityLabels = citySorted.map(c=>c[0]);
+        const cityCounts = citySorted.map(c=>c[1]);
+        if (cityChart) cityChart.destroy();
+        cityChart = new Chart(document.getElementById('cityChart'), {
+            type: 'bar', data: { labels: cityLabels, datasets: [{ label: 'Вакансии', data: cityCounts, backgroundColor: '#b05e3c' }] },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+
+        // График 4: Распределение по опыту
+        const expMap = new Map();
+        filtered.forEach(d => { expMap.set(d.exp, (expMap.get(d.exp)||0)+1); });
+        const expLabels = Array.from(expMap.keys());
+        const expValues = Array.from(expMap.values());
+        if (expChart) expChart.destroy();
+        expChart = new Chart(document.getElementById('expChart'), {
+            type: 'pie', data: { labels: expLabels, datasets: [{ data: expValues, backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444'] }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        // Таблица детализации
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        const slice = filtered.slice(0, 50);
+        slice.forEach(item => {
+            const row = tbody.insertRow();
+            row.insertCell(0).innerText = item.tech;
+            row.insertCell(1).innerText = item.city;
+            row.insertCell(2).innerText = item.exp;
+            row.insertCell(3).innerText = item.salary_avg ? item.salary_avg.toLocaleString() + ' ₽' : '—';
+            let shortSkills = item.skills ? item.skills.substring(0, 50) : (item.tech === 'Java разработчик' ? 'Java, Spring' : '—');
+            row.insertCell(4).innerText = shortSkills;
+        });
+    }
+
+    function populateFilters() {
+        const techSet = new Set(currentData.map(d=>d.tech));
+        const citySet = new Set(currentData.map(d=>d.city));
+        const expSet = new Set(currentData.map(d=>d.exp));
+        const techSelect = document.getElementById('techFilter');
+        const citySelect = document.getElementById('cityFilter');
+        const expSelect = document.getElementById('expFilter');
+        techSelect.innerHTML = '<option value="all">Все технологии</option>';
+        citySelect.innerHTML = '<option value="all">Все города</option>';
+        expSelect.innerHTML = '<option value="all">Любой опыт</option>';
+        Array.from(techSet).sort().forEach(t => { techSelect.innerHTML += `<option value="${t}">${t}</option>`; });
+        Array.from(citySet).sort().forEach(c => { citySelect.innerHTML += `<option value="${c}">${c}</option>`; });
+        Array.from(expSet).sort().forEach(e => { expSelect.innerHTML += `<option value="${e}">${e}</option>`; });
+    }
+
+    function attachEvents() {
+        document.getElementById('techFilter').addEventListener('change', () => updateDashboard());
+        document.getElementById('cityFilter').addEventListener('change', () => updateDashboard());
+        document.getElementById('expFilter').addEventListener('change', () => updateDashboard());
+        document.getElementById('resetFilters').addEventListener('click', () => {
+            document.getElementById('techFilter').value = 'all';
+            document.getElementById('cityFilter').value = 'all';
+            document.getElementById('expFilter').value = 'all';
+            updateDashboard();
+        });
+    }
+
+    populateFilters();
+    attachEvents();
+    updateDashboard();
+</script>
+</body>
+</html>

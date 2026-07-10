@@ -1,0 +1,196 @@
+-- select *
+-- from HH limit 10;
+
+-- select * from HH limit 10 where id = 130974615 order by published;
+
+-- select COUNT(HH.id)
+-- from HH;
+
+-- id, technology, name, company
+-- city, salary_display, salary_from, salary_to, salary_currency, experience, employment,
+-- schedule, published, key_skills, description
+
+-- select id from HH where id is null;
+-- select count(id) - count(distinct id) from HH;
+-- select id, count(id) as cnt from HH  group by id having count(id) > 1 order by cnt desc; -- 130974615
+
+-- select distinct technology from HH;
+-- select id from HH where technology = ''
+
+-- select id from HH where name is null;
+-- select id from HH where name = '';
+
+-- select id from HH where company = '';
+-- select id from HH where company is null;
+
+-- select id from HH where city = '';
+-- select id from HH where city is null;
+-- select distinct city from HH;
+
+-- select distinct salary_display from HH;
+-- select count(id) from HH where salary_display = 'Не указана';
+
+-- select id from HH where salary_from is null;
+-- select id from HH where salary_to is null;
+-- select count(id) from HH where salary_from = 0 and salary_to = 0;
+
+-- select distinct salary_currency from HH;
+-- select count(id) from HH where salary_currency = '';
+
+-- select distinct experience from HH;
+
+-- select distinct employment from HH;
+-- select count(id) from HH where employment = '';
+
+-- select distinct schedule from HH;
+-- select count(id) from HH where schedule = '';
+
+-- select count(id) from HH where published is null;
+
+-- select distinct key_skills from HH;
+-- select count(id) from HH where key_skills = '';
+
+-- select distinct schedule from HH;
+
+-- select count(id) from HH where description = '';
+
+-- добавление в HH дополнительных столбцов и удаление ненужных столбцов для построения дашборда
+with t as(
+select id, 
+      technology,  
+      name, 
+      company,
+      city, 
+      salary_from, 
+      salary_to,
+      case 
+        when salary_from = 0 then salary_to
+        when salary_to = 0 then salary_from
+        when salary_from <> 0 and salary_to <> 0 then (salary_from + salary_to)/2
+      end salary_avg,
+      case
+        when salary_from +  salary_to = 0 then 'no'
+        else 'yes'
+      end salary_filled,
+      salary_currency, 
+      case 
+        when salary_currency = 'RUR' then 1
+        when salary_currency = 'USD' then 73.1385
+        when salary_currency = 'EUR' then 86.2899
+        when salary_currency = '' then 0
+      end exchange_rate,
+      experience, 
+      employment,
+      schedule, 
+      published::date as published,
+      now()::date - published::date as day_diff,
+      case 
+        when now()::date - published::date < 50 then 'менее 50 дней'
+        when now()::date - published::date < 100 then 'от 50 до 100 дней'
+        when now()::date - published::date >= 100 then '100 и более дней'
+      end day_diff_group,
+      key_skills, 
+      description,
+      row_number() over(partition by id order by published desc) as flag_for_drop_duplicates
+from HH
+)
+
+select id,
+      technology,
+      name,
+      company,
+      city,
+      salary_avg*exchange_rate as salary_avg_rur,
+      salary_filled,
+      experience,
+      employment,
+      schedule,
+      published,
+      day_diff_group
+from t
+where flag_for_drop_duplicates = 1
+
+
+-- распарсим навыки
+with t1 as(
+select id, 
+      technology,  
+      key_skills,
+      row_number() over(partition by id order by published desc) as flag_for_drop_duplicates
+from HH
+),
+
+     t2 as(
+select id,
+       technology, 
+       trim(lower(skill)) AS skills,
+       count(id) over(partition by technology, trim(lower(skill))) as cnt_skill
+from t1
+array join splitByChar(',', key_skills) AS skill
+where key_skills != '' and  flag_for_drop_duplicates=1
+order by technology, lower(skill)
+)
+
+select technology,
+       skills
+from t2 
+where cnt_skill >= 4
+
+-- для расчета средней зп
+with t as(
+select id, 
+      technology,  
+      name, 
+      company,
+      city, 
+      salary_from, 
+      salary_to,
+      case 
+        when salary_from = 0 then salary_to
+        when salary_to = 0 then salary_from
+        when salary_from <> 0 and salary_to <> 0 then (salary_from + salary_to)/2
+      end salary_avg,
+      case
+        when salary_from +  salary_to = 0 then 'no'
+        else 'yes'
+      end salary_filled,
+      salary_currency, 
+      case 
+        when salary_currency = 'RUR' then 1
+        when salary_currency = 'USD' then 73.1385
+        when salary_currency = 'EUR' then 86.2899
+        when salary_currency = '' then 0
+      end exchange_rate,
+      experience, 
+      employment,
+      case 
+        when schedule <> '' then schedule
+        when schedule = '' then 'Не указано'
+      end schedule,
+      published::date as published,
+      now()::date - published::date as day_diff,
+      case 
+        when now()::date - published::date < 50 then 'менее 50 дней'
+        when now()::date - published::date < 100 then 'от 50 до 100 дней'
+        when now()::date - published::date >= 100 then '100 и более дней'
+      end day_diff_group,
+      key_skills, 
+      description,
+      row_number() over(partition by id order by published desc) as flag_for_drop_duplicates
+from HH
+)
+
+select id,
+      technology,
+      name,
+      company,
+      city,
+      salary_avg*exchange_rate as salary_avg_rur,
+      salary_filled,
+      experience,
+      employment,
+      schedule,
+      published,
+      day_diff_group
+from t
+where flag_for_drop_duplicates = 1 and  salary_filled = 'yes'
