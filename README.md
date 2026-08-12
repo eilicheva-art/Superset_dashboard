@@ -1,2 +1,2 @@
 # Superset_dashboard
-Реализован дашборд в Superset на данных ClicHouse.
+Реализован дашборд в Superset на данных ClickHouse.
