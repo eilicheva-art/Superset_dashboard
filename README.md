@@ -7,7 +7,8 @@
 
 [Официальная документация Superset](https://superset.apache.org)
 
-Дополнительно
+
+Дополнительно:
 
 [Документация Power BI](https://learn.microsoft.com/ru-ru/power-bi/)
  - [DAX](https://learn.microsoft.com/ru-ru/dax/dax-function-reference)
