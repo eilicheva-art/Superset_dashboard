@@ -9,5 +9,5 @@
 
 Дополнительно
 
-[Документация Power BI] (https://learn.microsoft.com/ru-ru/power-bi/)
+[Документация Power BI](https://learn.microsoft.com/ru-ru/power-bi/)
  - [DAX](https://learn.microsoft.com/ru-ru/dax/dax-function-reference)
